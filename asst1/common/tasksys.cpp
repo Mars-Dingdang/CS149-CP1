@@ -56,7 +56,13 @@
 
 // If no task model chosen from the compiler cmdline, pick a reasonable default
 #if defined(_WIN32) || defined(_WIN64)
+// MinGW/other non-MSVC toolchains usually don't provide ConCRT headers.
+// Fall back to pthreads on those toolchains.
+#if defined(_MSC_VER)
 #define ISPC_USE_CONCRT
+#else
+#define ISPC_USE_PTHREADS
+#endif
 #elif defined(__linux__) || defined(__FreeBSD__)
 #define ISPC_USE_PTHREADS
 #elif defined(__APPLE__)
@@ -550,6 +556,7 @@ static pthread_t *threads = nullptr;
 static pthread_mutex_t taskSysMutex;
 static std::vector<TaskGroup *> activeTaskGroups;
 static sem_t *workerSemaphore;
+static sem_t workerSemaphoreStorage;
 
 static void *lTaskEntry(void *arg) {
     int threadIndex = (int)((int64_t)arg);
@@ -635,7 +642,13 @@ static void InitTaskSystem() {
                     // We launch one fewer thread than there are cores,
                     // since the main thread here will also grab jobs from
                     // the task queue itself.
-                    nThreads = sysconf(_SC_NPROCESSORS_ONLN) - 1;
+#ifdef ISPC_IS_WINDOWS
+                    SYSTEM_INFO sysInfo;
+                    GetSystemInfo(&sysInfo);
+                    nThreads = std::max(1, (int)sysInfo.dwNumberOfProcessors - 1);
+#else
+                    nThreads = std::max(1, (int)sysconf(_SC_NPROCESSORS_ONLN) - 1);
+#endif
 
                     int err;
                     if ((err = pthread_mutex_init(&taskSysMutex, nullptr)) != 0) {
@@ -643,9 +656,19 @@ static void InitTaskSystem() {
                         exit(1);
                     }
 
+                    bool success = false;
+#ifdef ISPC_IS_WINDOWS
+                    // MinGW/winpthreads often doesn't support named semaphores via sem_open().
+                    // Use an unnamed process-local semaphore instead.
+                    workerSemaphore = &workerSemaphoreStorage;
+                    if (sem_init(workerSemaphore, 0, 0) == 0) {
+                        success = true;
+                    } else {
+                        fprintf(stderr, "Error creating semaphore with sem_init: %s\n", strerror(errno));
+                    }
+#else
                     constexpr std::size_t FILENAME_MAX_LEN{1024UL};
                     char name[FILENAME_MAX_LEN];
-                    bool success = false;
                     srand(time(nullptr));
                     for (int i = 0; i < 10; i++) {
                         // Some platforms (e.g. FreeBSD) require the name to begin with a slash
@@ -660,6 +683,9 @@ static void InitTaskSystem() {
 
                     if (!success) {
                         fprintf(stderr, "Error creating semaphore (%s): %s\n", name, strerror(errno));
+                    }
+#endif
+                    if (!success) {
                         exit(1);
                     }
 
@@ -1190,7 +1216,13 @@ void TaskSys::createThreads() {
     init();
     int reserved = 4;
     int minid = 2;
-    nThreads = sysconf(_SC_NPROCESSORS_ONLN) - reserved;
+#ifdef ISPC_IS_WINDOWS
+    SYSTEM_INFO sysInfo;
+    GetSystemInfo(&sysInfo);
+    nThreads = std::max(1, (int)sysInfo.dwNumberOfProcessors - reserved);
+#else
+    nThreads = std::max(1, (int)sysconf(_SC_NPROCESSORS_ONLN) - reserved);
+#endif
 
     thread = (pthread_t *)malloc(nThreads * sizeof(pthread_t));
 

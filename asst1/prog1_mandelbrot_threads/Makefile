@@ -1,10 +1,20 @@
 
 CXX=g++ -m64
-CXXFLAGS=-I../common -Iobjs/ -O3 -std=c++11 -Wall -fPIC
+CXXFLAGS=-I../common -Iobjs/ -O3 -std=c++11 -Wall -fPIC -mavx2
 
 APP_NAME=mandelbrot
 OBJDIR=objs
 COMMONDIR=../common
+
+ifeq ($(OS),Windows_NT)
+SHELL := cmd.exe
+.SHELLFLAGS := /C
+MKDIR_OBJ=if not exist "$(OBJDIR)" mkdir "$(OBJDIR)"
+CLEAN_CMD=-rmdir /S /Q $(OBJDIR) 2>nul & del /Q *.ppm *~ $(APP_NAME) 2>nul
+else
+MKDIR_OBJ=mkdir -p $(OBJDIR)/
+CLEAN_CMD=rm -rf $(OBJDIR) *.ppm *~ $(APP_NAME)
+endif
 
 PPM_CXX=$(COMMONDIR)/ppm.cpp
 PPM_OBJ=$(addprefix $(OBJDIR)/, $(subst $(COMMONDIR)/,, $(PPM_CXX:.cpp=.o)))
@@ -15,10 +25,10 @@ default: $(APP_NAME)
 .PHONY: dirs clean
 
 dirs:
-		/bin/mkdir -p $(OBJDIR)/
+		$(MKDIR_OBJ)
 
 clean:
-		/bin/rm -rf $(OBJDIR) *.ppm *~ $(APP_NAME)
+		$(CLEAN_CMD)
 
 OBJS=$(OBJDIR)/main.o $(OBJDIR)/mandelbrotSerial.o $(OBJDIR)/mandelbrotThread.o $(PPM_OBJ)
 

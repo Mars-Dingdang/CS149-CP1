@@ -1,5 +1,5 @@
 CXX=g++ -m64 -march=native
-CXXFLAGS=-I../common -Iobjs/ -O3 -Wall
+CXXFLAGS=-I../common -Iobjs/ -O3 -Wall -mavx2 -ffp-contract=off
 ISPC=ispc
 # note: requires AVX2 capable machine
 ISPCFLAGS=-O3 --target=avx2-i32x8 --arch=x86-64 --pic
@@ -8,6 +8,16 @@ ISPCFLAGS=-O3 --target=avx2-i32x8 --arch=x86-64 --pic
 APP_NAME=sqrt
 OBJDIR=objs
 COMMONDIR=../common
+
+ifeq ($(OS),Windows_NT)
+SHELL := cmd.exe
+.SHELLFLAGS := /C
+MKDIR_OBJ=if not exist "$(OBJDIR)" mkdir "$(OBJDIR)"
+CLEAN_CMD=-rmdir /S /Q $(OBJDIR) 2>nul & del /Q *.ppm *~ $(APP_NAME) 2>nul
+else
+MKDIR_OBJ=mkdir -p $(OBJDIR)/
+CLEAN_CMD=rm -rf $(OBJDIR) *.ppm *~ $(APP_NAME)
+endif
 
 PPM_CXX=$(COMMONDIR)/ppm.cpp
 PPM_OBJ=$(addprefix $(OBJDIR)/, $(subst $(COMMONDIR)/,, $(PPM_CXX:.cpp=.o)))
@@ -21,12 +31,12 @@ default: $(APP_NAME)
 .PHONY: dirs clean
 
 dirs:
-		/bin/mkdir -p $(OBJDIR)/
+		$(MKDIR_OBJ)
 
 clean:
-		/bin/rm -rf $(OBJDIR) *.ppm *~ $(APP_NAME)
+		$(CLEAN_CMD)
 
-OBJS=$(OBJDIR)/main.o $(OBJDIR)/sqrtSerial.o $(OBJDIR)/sqrt_ispc.o $(PPM_OBJ) $(TASKSYS_OBJ)
+OBJS=$(OBJDIR)/main.o $(OBJDIR)/sqrtSerial.o $(OBJDIR)/sqrtSimd.o $(OBJDIR)/sqrt_ispc.o $(PPM_OBJ) $(TASKSYS_OBJ)
 
 $(APP_NAME): dirs $(OBJS)
 		$(CXX) $(CXXFLAGS) -o $@ $(OBJS) -lm $(TASKSYS_LIB)
