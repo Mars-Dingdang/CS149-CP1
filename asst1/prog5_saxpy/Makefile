@@ -8,6 +8,16 @@ APP_NAME=saxpy
 OBJDIR=objs
 COMMONDIR=../common
 
+ifeq ($(OS),Windows_NT)
+SHELL := cmd.exe
+.SHELLFLAGS := /C
+MKDIR_OBJ=if not exist "$(OBJDIR)" mkdir "$(OBJDIR)"
+CLEAN_CMD=-rmdir /S /Q $(OBJDIR) 2>nul & del /Q *.ppm *~ $(APP_NAME) 2>nul
+else
+MKDIR_OBJ=mkdir -p $(OBJDIR)/
+CLEAN_CMD=rm -rf $(OBJDIR) *.ppm *~ $(APP_NAME)
+endif
+
 TASKSYS_CXX=$(COMMONDIR)/tasksys.cpp
 TASKSYS_LIB=-lpthread
 TASKSYS_OBJ=$(addprefix $(OBJDIR)/, $(subst $(COMMONDIR)/,, $(TASKSYS_CXX:.cpp=.o)))
@@ -17,10 +27,10 @@ default: $(APP_NAME)
 .PHONY: dirs clean
 
 dirs:
-		/bin/mkdir -p $(OBJDIR)/
+		$(MKDIR_OBJ)
 
 clean:
-		/bin/rm -rf $(OBJDIR) *.ppm *~ $(APP_NAME)
+		$(CLEAN_CMD)
 
 OBJS=$(OBJDIR)/main.o $(OBJDIR)/saxpySerial.o $(OBJDIR)/saxpy_ispc.o $(TASKSYS_OBJ)
 
